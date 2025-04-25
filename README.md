@@ -168,155 +168,246 @@ This project is designed for individuals and organizations seeking to enhance ho
 
 ## Working Code
 
+#Tx Code
+
 ```
 #include <DHT.h>
-#include <ESP8266WiFi.h>
-#include <ThingSpeak.h>
-
-// WiFi Credentials
-const char* ssid = "YOUR_WIFI_SSID";   // Replace with your WiFi SSID
-const char* password = "YOUR_WIFI_PASSWORD";  // Replace with your WiFi Password
-
-// ThingSpeak Credentials
-const unsigned long CHANNEL_ID = YOUR_CHANNEL_ID;  // Replace with your ThingSpeak Channel ID
-const char* API_KEY = "YOUR_API_KEY";  // Replace with your ThingSpeak API Key
-
-WiFiClient client;
 
 // Pin Definitions for Sensors
-#define PIR_PIN 2         // PIR sensor connected to GPIO2 (J2_7)
-#define FIRE_SENSOR_PIN 4 // Fire sensor connected to GPIO4 (J2_14)
-#define LDR_PIN A0        // LDR sensor connected to ADC_CH0 (J10_2)
-#define MQ135_PIN A1      // MQ-135 Air Quality sensor connected to ADC_CH1 (J10_4)
-#define DHTPIN 15         // DHT11 Temperature & Humidity sensor connected to GPIO15 (J3_4)
+#define PIR_PIN 2         // PIR sensor -> GPIO2 (J2_7)
+#define FIRE_SENSOR_PIN 4 // Fire sensor -> GPIO4 (J2_14)
+#define LDR_PIN A0        // LDR sensor -> ADC_CH0 (J10_2)
+#define MQ135_PIN A1      // MQ-135 sensor -> ADC_CH1 (J10_4)
+#define DHTPIN 15         // DHT11 sensor -> GPIO15 (J3_4)
 
 // Pin Definitions for Relays
-#define RELAY_MOTION 5    // Relay IN1 controls Motion-based activation (J2_10)
-#define RELAY_LIGHT 6     // Relay IN2 controls Light based on LDR (J2_12)
-#define RELAY_FIRE 7      // Relay IN3 controls Fan/Exhaust for Air Quality (J2_14)
+#define RELAY_MOTION 5    // Relay IN1 -> Motion Control (J2_10)
+#define RELAY_LIGHT 6     // Relay IN2 -> Light Control (J2_12)
+#define RELAY_FIRE 7      // Relay IN3 -> Air Quality Fan Control(J2_14)
 
-// Buzzer Pin for Fire Alarm
-#define BUZZER_PIN 14     // Buzzer connected to GPIO8 (J2_6)
+// Buzzer Pin (2-pin connection)
+#define BUZZER_PIN 14     // Buzzer -> GPIO8 (J2_6)
 
-// DHT Sensor Type
-#define DHTTYPE DHT11     
+#define DHTTYPE DHT11     // Define DHT sensor type
 DHT dht(DHTPIN, DHTTYPE); // Initialize DHT sensor
 
 void setup() {
     Serial.begin(115200);  // Start Serial Monitor
 
-    WiFi.begin(ssid, password);
-    Serial.print("Connecting to WiFi");
-    while (WiFi.status() != WL_CONNECTED) {
-        delay(1000);
-        Serial.print(".");
-    }
-    Serial.println("\nWiFi Connected!");
-    ThingSpeak.begin(client);  
-
-    // Initialize Sensors as Inputs
+    // Initialize Sensors
     pinMode(PIR_PIN, INPUT);
     pinMode(FIRE_SENSOR_PIN, INPUT);
     dht.begin();  // Start DHT11 sensor
 
-    // Initialize Relay and Buzzer Pins as Outputs
+    // Initialize Relay Pins as OUTPUT
     pinMode(RELAY_MOTION, OUTPUT);
     pinMode(RELAY_LIGHT, OUTPUT);
     pinMode(RELAY_FIRE, OUTPUT);
-    pinMode(BUZZER_PIN, OUTPUT);
+    pinMode(BUZZER_PIN, OUTPUT);  // Buzzer as output
 
-    // Set initial state: Turn off relays and buzzer
+    // Ensure Relays and Buzzer are OFF initially
     digitalWrite(RELAY_MOTION, HIGH);
     digitalWrite(RELAY_LIGHT, HIGH);
     digitalWrite(RELAY_FIRE, HIGH);
-    digitalWrite(BUZZER_PIN, LOW);
+    digitalWrite(BUZZER_PIN, LOW); // Buzzer OFF initially
 
-    Serial.println("All Sensors, Relays & Buzzer Initialized...\n");
+   // Serial.println("All Sensors, Relays & Buzzer Initialized...\n");
 }
 
 void loop() {
-    Serial.println("---------- SENSOR READINGS ----------");
-
-    // 🚶‍♂ PIR Sensor - Motion Detection
+   
+    // 🚶‍♂ PIR Sensor (Motion Detection)
     int motionState = digitalRead(PIR_PIN);
-    Serial.print("PIR Motion: ");
-    Serial.println(motionState ? "🚶‍♂ Motion Detected!" : "No Motion");
-
-    // Control Relay for Motion Detection (Turn ON if motion is detected)
+   
+    // Control Relay for Motion Detection
     digitalWrite(RELAY_MOTION, motionState ? LOW : HIGH);
-    Serial.println(motionState ? "🔴 Motion Relay ON" : "⚪ Motion Relay OFF");
-
-    // 🔥 Fire Sensor - Flame Detection
+    
+    // 🔥 Fire Sensor (Flame Detection)
     int fireState = digitalRead(FIRE_SENSOR_PIN);
-    Serial.print("Flame Detection: ");
-    Serial.println(fireState ? "No Fire" : "🔥 Fire Detected! 🔥");
-
-    // Control Buzzer for Fire Alarm (ON when fire is detected)
-    digitalWrite(BUZZER_PIN, fireState == LOW ? HIGH : LOW);
-
-    // ☀ LDR Sensor - Light Intensity Measurement
-    int lightValue = analogRead(LDR_PIN);
-    float ldrVoltage = lightValue * (3.3 / 4095.0); // Convert ADC value to voltage
-    Serial.print("Light Intensity: ");
-    Serial.print(lightValue);
-    Serial.print(" | Voltage: ");
-    Serial.println(ldrVoltage);
-
-    // Control Relay for Light (Turn ON when it's dark)
-    digitalWrite(RELAY_LIGHT, lightValue > 1500 ? LOW : HIGH);
-    Serial.println(lightValue > 1500 ? "💡 Light Relay ON (Dark)" : "⚪ Light Relay OFF (Bright)");
-
-    // 🌫 MQ-135 Sensor - Air Quality Measurement
-    int airQualityValue = analogRead(MQ135_PIN);
-    float airQualityVoltage = airQualityValue * (3.3 / 4095.0);
-    Serial.print("Air Quality (ADC Value): ");
-    Serial.print(airQualityValue);
-    Serial.print(" | Voltage: ");
-    Serial.println(airQualityVoltage);
-
-    // Control Fan/Exhaust Relay based on Air Quality
-    if (airQualityValue > 1400) {  // Poor Air Quality
-        Serial.println("⚠ Poor Air Quality! ⚠");
-        digitalWrite(RELAY_FIRE, LOW); // Turn ON fan
-        Serial.println("Fan Relay ON");
-    } else if (airQualityValue > 700) {  // Moderate Air Quality
-        Serial.println("😐 Moderate Air Quality.");
-        digitalWrite(RELAY_FIRE, LOW); // Turn ON fan
-        Serial.println("Fan Relay ON");
-    } else {  // Good Air Quality
-        Serial.println("😊 Good Air Quality.");
-        digitalWrite(RELAY_FIRE, HIGH); // Turn OFF fan
-        Serial.println("Fan Relay OFF");
+   
+    // Control Relay & Buzzer for Fire Detection
+    if (fireState == LOW) {  // Fire Detected (LOW = Fire)
+        digitalWrite(BUZZER_PIN, HIGH); // 🔊 Turn ON Buzzer
+    } else {
+        digitalWrite(BUZZER_PIN, LOW); // 🔇 Turn OFF Buzzer
     }
 
-    // 🌡 DHT11 Sensor - Temperature & Humidity Measurement
+    // ☀ LDR Sensor (Light Intensity)
+    int lightValue = analogRead(LDR_PIN);
+    float ldrVoltage = lightValue * (3.3 / 4095.0); // Convert ADC value to voltage
+    
+    // ✅ REVERSED LOGIC: Turn ON Relay when it's DARK
+    digitalWrite(RELAY_LIGHT, lightValue > 1500 ? LOW : HIGH);
+   // Serial.println(lightValue > 1500 ? "💡 Light Relay ON (Dark)" : "⚪ Light Relay OFF (Bright)");
+
+    // 🌫 MQ-135 Sensor (Air Quality)
+    int airQualityValue = analogRead(MQ135_PIN);
+    float airQualityVoltage = airQualityValue * (3.3 / 4095.0);
+   
+    // Categorize Air Quality
+    if (airQualityValue > 1400) {
+        //Serial.println("⚠ Poor Air Quality! ⚠");
+        digitalWrite(RELAY_FIRE, LOW); // Turn ON fan Relay
+        Serial.println("Fan Relay ON");
+    } else if (airQualityValue > 700) {
+        //Serial.println("😐 Moderate Air Quality.");
+        digitalWrite(RELAY_FIRE, LOW); // Turn ON fan Relay
+        Serial.println("Fan Relay ON");
+    } else {
+        //Serial.println("😊 Good Air Quality.");
+        digitalWrite(RELAY_FIRE, HIGH); // Turn OFF fan Relay
+        //Serial.println("Fan Relay OFF");
+    }
+    // 🌡 DHT11 Sensor (Temperature & Humidity)
     float temperature = dht.readTemperature();
     float humidity = dht.readHumidity();
 
-    // Check if DHT11 sensor is working correctly
-    if (isnan(temperature) || isnan(humidity)) {
-        Serial.println("❌ Failed to read from DHT11 sensor!");
-    } else {
-        Serial.print("🌡 Temperature: ");
-        Serial.print(temperature);
-        Serial.print("°C | 💧 Humidity: ");
-        Serial.print(humidity);
-        Serial.println("%");
+Serial.print("G");
+Serial.print(airQualityValue)
+Serial.print("F");
+Serial.print(fireState);
+Serial.print("P");
+Serial.print(motionState);
+Serial.print("T");
+Serial.print(temperature);
+Serial.print("H");
+Serial.print(humidity);
+Serial.print("L");
+Serial.print(lightValue);
+Serial.print("#");
+
+ delay(3000);  // Wait 2 seconds before next reading
+}
+
+```
+#Rx_code
+```
+
+#include <ESP8266WiFi.h>
+#include <WiFiClientSecure.h>
+#include <SoftwareSerial.h>
+
+SoftwareSerial mySerial(D2, D3); // RX, TX (Connect to TX, RX of Arduino Uno)
+
+String receivedData = "";
+int airQualityValue, fireState, motionState, temperature, humidity, lightValue;
+
+const char* ssid     = "wifi001";
+const char* password = "123456789";
+
+const char* host = "iotprojects.org";
+const char* streamId   = "....................";
+const char* privateKey = "....................";
+
+void setup() {
+    Serial.begin(115200);  // Serial monitor
+    mySerial.begin(9600);  // Communication with Arduino Uno
+Serial.println();
+  Serial.println();
+  Serial.print("Connecting to ");
+  Serial.println(ssid);
+  
+  WiFi.begin(ssid, password);
+  
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
+}
+
+void loop() {
+    while (mySerial.available()) {
+        char receivedChar = mySerial.read();
+        receivedData += receivedChar;
+
+        if (receivedChar == '#') {  // End of data packet
+            parseData(receivedData);
+            receivedData = "";  // Clear buffer for next data
+            
+ Serial.print("connecting to ");
+  Serial.println(host);
+  
+
+WiFiClientSecure client;
+client.setInsecure();  // Disable SSL certificate validation
+const int httpsPort = 443;
+
+if (!client.connect(host, httpsPort)) {
+  Serial.println("connection failed");
+  return;
+}
+
+String url = "GET https://iotprojects.org/home_automation/update.php?gas="; // Getting info from my online database through my online website
+  url+=airQualityValue;
+  url+="&fire=";
+  url+=fireState;
+  url+="&pir=";
+  url+=motionState;
+  url+="&temp=";
+  url+=temperature;
+  url+="&hum=";
+  url+=humidity;
+  url+="&ladr=";
+  url+=lightValue;
+url += " HTTP/1.1\r\nHost: iotprojects.org\r\nConnection: close\r\n\r\n";
+client.print(url);
+
+  unsigned long timeout = millis();
+  while (client.available() == 0) {
+    if (millis() - timeout > 5000) {
+      Serial.println(">>> Client Timeout !");
+      client.stop();
+      return;
     }
+  }
+  
+  
+  // Read all the lines of the reply from server and print them to Serial
+  while(client.available()){
+    char a=client.read();
+    //String line = client.readStringUntil('\r');
+    //Serial.print(line);
+   
+    Serial.print(a);
+      
+    } 
+    
+  Serial.println();
+ // Serial.println("closing connection");
 
-    Serial.println("-------------------------------------\n");
 
-    // Send Data to ThingSpeak
-    ThingSpeak.setField(1, temperature);
-    ThingSpeak.setField(2, humidity);
-    ThingSpeak.setField(3, lightValue);
-    ThingSpeak.setField(4, airQualityValue);
-    ThingSpeak.setField(5, motionState);
-    ThingSpeak.setField(6, fireState);
+        }
+    }
+}
 
-    int status = ThingSpeak.writeFields(CHANNEL_ID, API_KEY);
+// Function to parse received data
+void parseData(String data) {
+    airQualityValue = getValue(data, 'G', 'F');
+    fireState       = getValue(data, 'F', 'P');
+    motionState     = getValue(data, 'P', 'T');
+    temperature     = getValue(data, 'T', 'H');
+    humidity        = getValue(data, 'H', 'L');
+    lightValue      = getValue(data, 'L', '#');
 
-    delay(3000);  // Wait 3 seconds before next reading
+    Serial.print("Air Quality: "); Serial.println(airQualityValue);
+    Serial.print("Fire State: "); Serial.println(fireState);
+    Serial.print("Motion State: "); Serial.println(motionState);
+    Serial.print("Temperature: "); Serial.println(temperature);
+    Serial.print("Humidity: "); Serial.println(humidity);
+    Serial.print("Light Value: "); Serial.println(lightValue);
+
+
+
+}
+
+// Function to extract value from the received data
+int getValue(String data, char startChar, char endChar) {
+    int startIndex = data.indexOf(startChar) + 1;
+    int endIndex = data.indexOf(endChar);
+    if (startIndex > 0 && endIndex > startIndex) {
+        return data.substring(startIndex, endIndex).toInt();
+    }
+    return -1; // Return -1 if parsing fails
 }
 
 ```
@@ -412,26 +503,18 @@ https://github.com/user-attachments/assets/49890077-9847-451e-918a-f1e012c9c470
 
 ![Motion Detection](https://github.com/user-attachments/assets/db2da071-9d90-44bc-93af-8020e7e6f023)
 
-### Thingspeak Monitoring
-
-![Thingspeak Monitoring 1](https://github.com/user-attachments/assets/074efb72-e4f2-492f-be98-4b63b59a4ff0)
-
-![Thingspeak Monitoring 2](https://github.com/user-attachments/assets/baa732a2-ce27-40e7-8878-d7ecedf3b64a)
-
-![Thingspeak Monitoring 3](https://github.com/user-attachments/assets/0680aae4-5702-426a-8d14-8ec406153a37)
-
 ## Contributors
+- Sri Krishna M, Pre-Final Year Student, Sri Eshwar College of Engineering.
 - Sree Vishnu Varthini S, Pre-Final Year Student, Sri Eshwar College of Engineering.
 - Shanmuga Sanjeevi P S, Pre-Final Year Student, Sri Eshwar College of Engineering.
-- Sri Krishna M, Pre-Final Year Student, Sri Eshwar College of Engineering.
 
 ## Acknowledgements
 - Mr. Kunal Ghosh, Director, VSD Corp. Pvt. Ltd.
 - Mr. Vignesh A, Research Scholar, Sri Eshwar College of Engineering
 
 ## Contact Information
+- Sri Krishna M, Pre-Final Year Student, Sri Eshwar College of Engineering, srikrishna0017@gmail.com
 - Sree Vishnu Varthini S, Pre-Final Year Student, Sri Eshwar College of Engineering, sreevishnuvarthini@gmail.com
 - Shanmuga Sanjeevi P S, Pre-Final Year Student, Sri Eshwar College of Engineering, shanmugasanjeevi2004@gmail.com
-- Sri Krishna M, Pre-Final Year Student, Sri Eshwar College of Engineering, srikrishna0017@gmail.com
 - Mr. Vignesh A, Research Scholar, Sri Eshwar College of Engineering, vignesh.a@sece.ac.in
 - Mr. Kunal Ghosh, Director, VSD Corp. Pvt. Ltd., kunalpghosh@gmail.com
